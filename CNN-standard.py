@@ -2,9 +2,13 @@ import torch
 import torch.nn as nn
 import torch.utils.data as Data
 import torchvision
+from torchvision import datasets, transforms
 import matplotlib.pyplot as plt
 import os
 import time
+from color_mnist import ColoredMNIST
+from torch.utils.data import Dataset, DataLoader
+from torch.utils.data.sampler import RandomSampler
 
 '''
 Created on Wen Nov 30 14:40:09 2022
@@ -26,36 +30,41 @@ M=4
 DOWNLOAD_MNIST = True  # 表示还没有下载数据集，如果数据集下载好了就写False
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-# 下载mnist，【训练集】
-train_data = torchvision.datasets.MNIST(
-    root='./mnist/',  # 保存或提取的位置  会放在当前文件夹中
-    train=True,  # true说明是用于训练的数据，false说明是用于测试的数据
-    transform=torchvision.transforms.ToTensor(),  # 转换PIL.Image or numpy.ndarray
-    # 此处ToTensor()将shape为(H, W, C)的nump.ndarray或img转为shape为(C, H, W)的tensor，其将每一个数值归一化到[0,1]，其归一化方法比较简单，直接除以255即可
-    download=DOWNLOAD_MNIST,
-)
-
-## load中加入数据集的归一化
+# # 下载mnist，【训练集】
 # train_data = torchvision.datasets.MNIST(
-#     root='./mnist/',
-#     train=True,
-#     transform=torchvision.transforms.Compose([
-#           torchvision.transforms.ToTensor(),
-#           torchvision.transforms.Normalize(mean=(0.1307,), std=(0.3081,))]), # 均值，标准差
+#     root='./mnist/',  # 保存或提取的位置  会放在当前文件夹中
+#     train=True,  # true说明是用于训练的数据，false说明是用于测试的数据
+#     transform=torchvision.transforms.ToTensor(),  # 转换PIL.Image or numpy.ndarray
+#     # 此处ToTensor()将shape为(H, W, C)的nump.ndarray或img转为shape为(C, H, W)的tensor，其将每一个数值归一化到[0,1]，其归一化方法比较简单，直接除以255即可
 #     download=DOWNLOAD_MNIST,
 # )
+#
+# # 加载Mnist训练集, Torch中的DataLoader是用来打乱、分配、预处理
+# train_loader = Data.DataLoader(
+#     dataset=train_data,
+#     batch_size=BATCH_SIZE,
+#     shuffle=True,  # 是否打乱数据，一般都打乱，，常用于进行多批次的模型训练
+#     drop_last=False  # 设置为True表示当数据集size不能整除batch_size时，则删除最后一个batch_size，否则就不删除
+# )
 
-# 加载Mnist训练集, Torch中的DataLoader是用来打乱、分配、预处理
-train_loader = Data.DataLoader(
-    dataset=train_data,
-    batch_size=BATCH_SIZE,
-    shuffle=True,  # 是否打乱数据，一般都打乱，，常用于进行多批次的模型训练
-    drop_last=False  # 设置为True表示当数据集size不能整除batch_size时，则删除最后一个batch_size，否则就不删除
-)
+train_loader = torch.utils.data.DataLoader(
+    ColoredMNIST(root='./data', env='all_train',
+                 transform=transforms.Compose([
+                     transforms.ToTensor(),
+                 ])),
+    batch_size=BATCH_SIZE, shuffle=False,)
 
-# 下载【测试集】并加载，返回值为一个二元组（data，target）
-test_data = torchvision.datasets.MNIST(root='./mnist/', train=False, transform=torchvision.transforms.ToTensor(),download=DOWNLOAD_MNIST,)
-test_loader = Data.DataLoader(dataset=test_data, batch_size=BATCH_SIZE, shuffle=False)
+# # 下载【测试集】并加载，返回值为一个二元组（data，target）
+# test_data = torchvision.datasets.MNIST(root='./mnist/', train=False, transform=torchvision.transforms.ToTensor(),download=DOWNLOAD_MNIST,)
+# test_loader = Data.DataLoader(dataset=test_data, batch_size=BATCH_SIZE, shuffle=False)
+
+test_loader = torch.utils.data.DataLoader(
+    ColoredMNIST(root='./data', env='test',
+                 transform=transforms.Compose([
+        transforms.ToTensor(),
+    ])),
+    batch_size=BATCH_SIZE, shuffle=False,)
+
 
 # # 训练中进行测试
 # test_x = torch.unsqueeze(test_data.data, dim=1).type(torch.FloatTensor)[:2000] / 255
@@ -75,7 +84,7 @@ class CNN(nn.Module):  # 我们建立的CNN继承nn.Module这个模块
             # kernel_size=3,  # 卷积核的大小
             # stride=1,  # 步长
             # padding=1,  # 想要con2d输出的图片长宽不变，就进行补零操作 padding = (kernel_size-1)/2
-            nn.Conv2d(1, 8, 3, 1, 1),  # 输出图像大小(8,28,28)
+            nn.Conv2d(3, 8, 3, 1, 1),  # 输出图像大小(8,28,28)
             nn.BatchNorm2d(8), # 对所有batch的同一个channel上的数据进行归一化
             nn.ReLU(),# 激活函数，非线性操作
             nn.MaxPool2d(kernel_size=3, stride=2, padding=1),  # 池化，[(H+2*p-k)/s +1]向下取整，# 输出图像大小(8,14,14)
@@ -156,7 +165,7 @@ def train():
 def test():
     test_ave_acc = []
     net = torch.load(model_path)
-    print('model:',net)
+    # print('model:',net)
     net.eval()  # 设置模型进入预测模式 evaluation
     with torch.no_grad():
         for batch_idx, (inputs, targets) in enumerate(test_loader):  # 分配batch data
